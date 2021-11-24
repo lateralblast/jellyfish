@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.0
+# Version:      0.0.1
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -41,7 +41,7 @@ def print_version(script_exe):
 
 def print_help(script_exe):
   print("\n")
-  command    = "%s -h" % (script_exe)
+  command  = "%s -h" % (script_exe)
   os.system(command)
   print("\n")
 
@@ -73,6 +73,26 @@ def print_options(script_exe):
       print(string)
   print("\n")
 
+# Handle output
+
+def handle_output(options,output):
+  if options['mask'] == True:
+    if re.search(r"serial|address|host|id",output.lower()):
+      if re.search(":",output):
+        param  = output.split(":")[0]
+        output = "%s: XXXXXXXX" % (param)
+  print(output)
+  return
+
+# Execute command
+
+def execute_command(options,command):
+  process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, )
+  output  = process.communicate()[0].decode()
+  if options['verbose'] == True:
+    string = "Output:\n%s" % (output)
+    handle_output(options,string)
+
 # If we have no command line arguments print help
 
 if sys.argv[-1] == sys.argv[0]:
@@ -82,8 +102,11 @@ if sys.argv[-1] == sys.argv[0]:
 # Get command line arguments
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--options", action='store_true')    # Display options information
-parser.add_argument("--version", action='store_true')    # Display version information
+parser.add_argument("--file", required=False)        	 # JSON file to read in
+parser.add_argument("--mask", action='store_true')     # Mask MAC addresses etc
+parser.add_argument("--print", action='store_true')    # Print JSON
+parser.add_argument("--options", action='store_true')  # Display options information
+parser.add_argument("--version", action='store_true')  # Display version information
 
 options = vars(parser.parse_args())
 
@@ -101,6 +124,23 @@ if options['options']:
   print_options(script_exe)
   exit()
 
+# Handle file switch
 
+if not options['file']:
+  options['file'] = "%s/vmware-iohcl.json" % (script_dir)
 
+# Exit if not JSON file
+
+if not os.path.exists(options['file']):
+  string = "Warning:\tJSON file %s not found" % (options['file'])
+  handle_output(options, string)
+  exit()
+
+# Handle print flag
+
+if options['print']:
+  with open(options['file'], 'r') as json_file:
+    json_data   = json.load(json_file)
+    json_output = json.dumps(json_data, indent=1)
+    print(json_output)
 
