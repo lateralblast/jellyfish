@@ -12,7 +12,12 @@ Requirements
 
 Required Python modules:
 
+- subprocess
+- argparse
 - json
+- sys
+- os
+- re
 
 License
 -------
@@ -24,5 +29,33 @@ http://creativecommons.org/licenses/by/4.0/legalcode
 Usage
 -----
 
+```
+./jellyfish.py --help
+usage: jellyfish.py [-h] [--file FILE] [--get GET] [--id ID] [--url URL] [--vid VID] [--did DID] [--ssid SSID]
+                    [--svid SVID] [--model MODEL] [--vendor VENDOR] [--release RELEASE] [--string STRING] [--mask]
+                    [--print] [--search] [--options] [--version]
+
+options:
+  -h, --help         show this help message and exit
+  --file FILE
+  --get GET
+  --id ID
+  --url URL
+  --vid VID
+  --did DID
+  --ssid SSID
+  --svid SVID
+  --model MODEL
+  --vendor VENDOR
+  --release RELEASE
+  --string STRING
+  --mask
+  --print
+  --search
+  --options
+  --version
+```
+
 Examples
 --------
+
