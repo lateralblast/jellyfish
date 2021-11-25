@@ -154,6 +154,7 @@ def search_json(options):
       item = options['get']
       print(output[item])
     else:
+      output = json.dumps(record, indent=1)
       print(output)
   return
 
