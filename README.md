@@ -33,7 +33,7 @@ Usage
 ./jellyfish.py --help
 usage: jellyfish.py [-h] [--file FILE] [--get GET] [--id ID] [--url URL] [--vid VID] [--did DID] [--ssid SSID]
                     [--svid SVID] [--model MODEL] [--vendor VENDOR] [--release RELEASE] [--string STRING] [--mask]
-                    [--print] [--search] [--options] [--version]
+                    [--fetch] [--print] [--search] [--options] [--version]
 
 options:
   -h, --help         show this help message and exit
@@ -50,6 +50,7 @@ options:
   --release RELEASE
   --string STRING
   --mask
+  --fetch
   --print
   --search
   --options
@@ -58,6 +59,13 @@ options:
 
 Examples
 --------
+
+Fetch VMware HCL JSON file:
+
+```
+ ./jellyfish.py --fetch
+100% [..........................................................................] 2846368 / 2846368%
+```
 
 Search for all Dell QLE2462 entries:
 

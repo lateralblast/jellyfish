@@ -8,3 +8,5 @@
 # Added code to deal with duplicates
 # 0.0.4: Thu 25 Nov 2021 21:05:22 AEDT
 # Improved search code
+# 0.0.5: Thu 25 Nov 2021 21:53:21 AEDT
+# Added code to fetch VMware HCL JSON file

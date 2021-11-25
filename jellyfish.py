@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.4
+# Version:      0.0.5
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -28,6 +28,34 @@ import re
 
 script_exe = sys.argv[0]
 script_dir = os.path.dirname(script_exe)
+
+# Check we have pip installed
+
+try:
+  from pip._internal import main
+except ImportError:
+  os.system("easy_install pip")
+  os.system("pip install --upgrade pip")
+
+# install and import a python module
+
+def install_and_import(package):
+  import importlib
+  try:
+    importlib.import_module(package)
+  except ImportError:
+    command = "python3 -m pip install --user %s" % (package)
+    os.system(command)
+  finally:
+    globals()[package] = importlib.import_module(package)
+
+# load wget
+
+try:
+  import wget
+except ImportError:
+  install_and_import("wget")
+  import wget
 
 # Print version
 
@@ -177,9 +205,11 @@ parser.add_argument("--ssid", required=False)          # SSID to search for
 parser.add_argument("--svid", required=False)          # SVID to search for
 parser.add_argument("--model", required=False)         # Model to search for
 parser.add_argument("--vendor", required=False)        # Vendor to search for
+parser.add_argument("--hclurl", required=False)        # Vendor to search for
 parser.add_argument("--release", required=False)       # Vendor to search for
 parser.add_argument("--string", required=False)        # A string to search for
 parser.add_argument("--mask", action='store_true')     # Mask MAC addresses etc
+parser.add_argument("--fetch", action='store_true')    # Fetch VMware HCL file from URL
 parser.add_argument("--print", action='store_true')    # Print JSON
 parser.add_argument("--search", action='store_true')   # Search JSON
 parser.add_argument("--options", action='store_true')  # Display options information
@@ -216,6 +246,18 @@ if options['options']:
 
 if not options['file']:
   options['file'] = "%s/vmware-iohcl.json" % (script_dir)
+
+# Handle hclurl switch:
+
+if not options['hclurl']:
+  options['hclurl'] = "http://www.virten.net/repo/vmware-iohcl.json"
+
+# Handle fetch switch
+
+if options['fetch']:
+  if os.path.exists(options['file']):
+    os.remove(options['file'])
+  wget.download(options['hclurl'],options['file'])
 
 # Exit if not JSON file
 
