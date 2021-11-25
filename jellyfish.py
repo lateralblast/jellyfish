@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.1
+# Version:      0.0.2
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -93,6 +93,66 @@ def execute_command(options,command):
     string = "Output:\n%s" % (output)
     handle_output(options,string)
 
+# Load JSON
+
+def load_json(options):
+  with open(options['file'], 'r') as json_file:
+    json_data = json.load(json_file)
+    json_data = json_data['data']
+    json_data = json_data['ioDevices']
+    options['data'] = json_data
+    return(options)
+
+# Print JSON
+
+def print_json(options):
+  options = load_json(options)
+  output  = json.dumps(options['data'], indent=1)
+  print(output)
+
+# Search JSON
+
+def search_json(options):
+  options = load_json(options)
+  found = False
+  for item in options['keys']:
+    if options[item]:
+      found = True
+  if found == False:
+    for record in options['data']:
+      if options['string']:
+        patern = r"\b(?=\w)" + re.escape(options['string']) + r"\b(?!\w)"
+        if re.search(patern, str(record)):
+          if options["get"]:
+            item   = options['get']
+            output = record[item]
+            output = json.dumps(output, indent=1)
+          else:
+            output = json.dumps(record, indent=1)
+          print(output)
+    return
+  for record in options['data']:
+    found = False
+    for item in options['keys']:
+      if options[item]:
+        patern = r"\b(?=\w)" + re.escape(options[item]) + r"\b(?!\w)"
+        if re.search(patern, record[item]):
+          if options['string']:
+            patern = r"\b(?=\w)" + re.escape(options['string']) + r"\b(?!\w)"
+            if re.search(patern, str(record)):
+              found = True
+          else:
+            found = True
+      if found == True:
+        if options["get"]:
+          item   = options['get']
+          output = record[item]
+          output = json.dumps(output, indent=1)
+        else:
+          output = json.dumps(record, indent=1)
+        print(output)
+  return
+
 # If we have no command line arguments print help
 
 if sys.argv[-1] == sys.argv[0]:
@@ -103,12 +163,35 @@ if sys.argv[-1] == sys.argv[0]:
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--file", required=False)        	 # JSON file to read in
+parser.add_argument("--get", required=False)           # Get a specific key
+parser.add_argument("--id", required=False)            # ID to search for
+parser.add_argument("--url", required=False)           # URL to search for
+parser.add_argument("--vid", required=False)           # VID to search for
+parser.add_argument("--did", required=False)           # VID to search for
+parser.add_argument("--ssid", required=False)          # SSID to search for
+parser.add_argument("--svid", required=False)          # SVID to search for
+parser.add_argument("--model", required=False)         # Model to search for
+parser.add_argument("--vendor", required=False)        # Vendor to search for
+parser.add_argument("--release", required=False)       # Vendor to search for
+parser.add_argument("--string", required=False)        # A string to search for
 parser.add_argument("--mask", action='store_true')     # Mask MAC addresses etc
 parser.add_argument("--print", action='store_true')    # Print JSON
+parser.add_argument("--search", action='store_true')   # Search JSON
 parser.add_argument("--options", action='store_true')  # Display options information
 parser.add_argument("--version", action='store_true')  # Display version information
 
 options = vars(parser.parse_args())
+
+# Handle release flag
+
+if options['release']:
+  options['releases'] = options['release']
+else:
+  options['releases'] = None
+
+# Create a list of keys
+
+options['keys'] = [ 'id', 'vendor', 'model', 'vid', 'did', 'ssid', 'svid', 'url', 'releases' ]
 
 # Handle version switch
 
@@ -139,8 +222,12 @@ if not os.path.exists(options['file']):
 # Handle print flag
 
 if options['print']:
-  with open(options['file'], 'r') as json_file:
-    json_data   = json.load(json_file)
-    json_output = json.dumps(json_data, indent=1)
-    print(json_output)
+  print_json(options)
+  exit()
+
+# Handle search flag
+
+if options['search']:
+  search_json(options)
+  exit()
 
