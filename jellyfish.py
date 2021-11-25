@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.2
+# Version:      0.0.3
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -114,7 +114,8 @@ def print_json(options):
 
 def search_json(options):
   options = load_json(options)
-  found = False
+  found   = False
+  records = []
   for item in options['keys']:
     if options[item]:
       found = True
@@ -129,7 +130,10 @@ def search_json(options):
             output = json.dumps(output, indent=1)
           else:
             output = json.dumps(record, indent=1)
-          print(output)
+          if not output in records:
+            records.append(output)
+    for output in records:
+      print(output)
     return
   for record in options['data']:
     found = False
@@ -150,7 +154,10 @@ def search_json(options):
           output = json.dumps(output, indent=1)
         else:
           output = json.dumps(record, indent=1)
-        print(output)
+        if not output in records:
+          records.append(output)
+  for output in records:
+    print(output)
   return
 
 # If we have no command line arguments print help
