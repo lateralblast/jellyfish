@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.3
+# Version:      0.0.4
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -115,7 +115,6 @@ def print_json(options):
 def search_json(options):
   options = load_json(options)
   found   = False
-  records = []
   for item in options['keys']:
     if options[item]:
       found = True
@@ -135,29 +134,27 @@ def search_json(options):
     for output in records:
       print(output)
     return
-  for record in options['data']:
-    found = False
-    for item in options['keys']:
-      if options[item]:
+  records = options['data']
+  for item in options['keys']:
+    if options[item]:
+      outputs = []
+      for record in records:
         patern = r"\b(?=\w)" + re.escape(options[item]) + r"\b(?!\w)"
         if re.search(patern, record[item]):
           if options['string']:
             patern = r"\b(?=\w)" + re.escape(options['string']) + r"\b(?!\w)"
             if re.search(patern, str(record)):
-              found = True
+              outputs.append(record)
           else:
-            found = True
-      if found == True:
-        if options["get"]:
-          item   = options['get']
-          output = record[item]
-          output = json.dumps(output, indent=1)
-        else:
-          output = json.dumps(record, indent=1)
-        if not output in records:
-          records.append(output)
+            outputs.append(record)
+      records = {}
+      records = outputs
   for output in records:
-    print(output)
+    if options['get']:
+      item = options['get']
+      print(output[item])
+    else:
+      print(output)
   return
 
 # If we have no command line arguments print help
