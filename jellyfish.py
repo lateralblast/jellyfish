@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.5
+# Version:      0.0.6
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -57,12 +57,39 @@ except ImportError:
   install_and_import("wget")
   import wget
 
+# Load selenium
+
+try:
+  from selenium import webdriver
+except ImportError:
+  install_and_import("selenium")
+  from selenium import webdriver
+
+# Load bs4
+
+try:
+  from bs4 import BeautifulSoup
+except ImportError:
+  install_and_import("bs4")
+  from bs4 import BeautifulSoup
+
+# Load pygments
+
+try:
+  from pygments import highlight
+except ImportError:
+  install_and_import("pygments")
+  from pygments import highlight
+
+from pygments.formatters.terminal256 import Terminal256Formatter
+from pygments.lexers.web import JsonLexer  
+
 # Print version
 
 def print_version(script_exe):
   file_array = file_to_array(script_exe)
   version    = list(filter(lambda x: re.search(r"^# Version", x), file_array))[0].split(":")[1]
-  version    = re.sub(r"\s+","",version)
+  version    = re.sub(r"\s+", "", version)
   print(version)
 
 # Print help
@@ -88,7 +115,7 @@ def print_options(script_exe):
   print("\nOptions:\n")
   for line in opts_array:
     line = line.rstrip()
-    if re.search(r"#",line):
+    if re.search(r"#", line):
       option = line.split('"')[1]
       info   = line.split("# ")[1]
       if len(option) < 8:
@@ -103,10 +130,10 @@ def print_options(script_exe):
 
 # Handle output
 
-def handle_output(options,output):
+def handle_output(options, output):
   if options['mask'] == True:
-    if re.search(r"serial|address|host|id",output.lower()):
-      if re.search(":",output):
+    if re.search(r"serial|address|host|id", output.lower()):
+      if re.search(":", output):
         param  = output.split(":")[0]
         output = "%s: XXXXXXXX" % (param)
   print(output)
@@ -114,12 +141,12 @@ def handle_output(options,output):
 
 # Execute command
 
-def execute_command(options,command):
-  process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, )
+def execute_command(options, command):
+  process = subprocess.Popen(command, shell=True, stdout = subprocess.PIPE, )
   output  = process.communicate()[0].decode()
   if options['verbose'] == True:
     string = "Output:\n%s" % (output)
-    handle_output(options,string)
+    handle_output(options, string)
 
 # Load JSON
 
@@ -143,6 +170,7 @@ def print_json(options):
 def search_json(options):
   options = load_json(options)
   found   = False
+  records = []
   for item in options['keys']:
     if options[item]:
       found = True
@@ -159,7 +187,13 @@ def search_json(options):
             output = json.dumps(record, indent=1)
           if not output in records:
             records.append(output)
-    for output in records:
+    for record in records:
+      json_data = record
+      output = highlight(
+        json_data,
+        lexer=JsonLexer(),
+        formatter=Terminal256Formatter(),
+      )
       print(output)
     return
   records = options['data']
@@ -182,8 +216,63 @@ def search_json(options):
       item = options['get']
       print(output[item])
     else:
-      output = json.dumps(record, indent=1)
+      json_data = json.dumps(record, indent=1)
+      output = highlight(
+        json_data,
+        lexer=JsonLexer(),
+        formatter=Terminal256Formatter(),
+      )
       print(output)
+  return
+
+# Initiate web client
+
+def start_web_driver():
+  from selenium.webdriver.firefox.options import Options
+  options = Options()
+  options.headless = True
+  driver = webdriver.Firefox(options=options)
+  return driver
+
+# Get driver information from VMware URL
+
+def get_driver_info(options):
+  if not re.search(r"productid", options['driverurl']):
+    handle_output(options,"Warning:\tInvalid URL")
+    return
+  prod_id   = re.split("=", options['driverurl'])[-1]
+  html_file = "%s/%s.html" % (options['workdir'], prod_id)
+  json_file = "%s/%s.json" % (options['workdir'], prod_id)
+  if not os.path.exists(json_file):
+    if not os.path.exists(html_file):
+      driver = start_web_driver()
+      driver.get(options['driverurl'])
+      html_data = driver.page_source
+      open_file = open(html_file, "w")
+      open_file.write(html_data)
+      open_file.close()
+    open_file = open(html_file, "r")
+    html_data = open_file.readlines()
+    open_file.close()
+    for html_line in html_data:
+      if re.search(r"Component_Id", html_line):
+        html_line = html_line.split("var details =")[1]
+        html_line = re.sub(r"\;$", "", html_line)
+        open_file = open(json_file, "w")
+        open_file.write(html_line)
+        open_file.close()
+  open_file = open(json_file, "r")
+  json_data = open_file.read()
+  open_file.close()
+  json_data = json.loads(json_data)
+  json_data = json.dumps(json_data, indent=1)
+  output = highlight(
+    json_data,
+    lexer=JsonLexer(),
+    formatter=Terminal256Formatter(),
+  )
+  #json_data = json.loads(json_data)
+  print(output)
   return
 
 # If we have no command line arguments print help
@@ -195,25 +284,28 @@ if sys.argv[-1] == sys.argv[0]:
 # Get command line arguments
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--file", required=False)        	 # JSON file to read in
-parser.add_argument("--get", required=False)           # Get a specific key
-parser.add_argument("--id", required=False)            # ID to search for
-parser.add_argument("--url", required=False)           # URL to search for
-parser.add_argument("--vid", required=False)           # VID to search for
-parser.add_argument("--did", required=False)           # VID to search for
-parser.add_argument("--ssid", required=False)          # SSID to search for
-parser.add_argument("--svid", required=False)          # SVID to search for
-parser.add_argument("--model", required=False)         # Model to search for
-parser.add_argument("--vendor", required=False)        # Vendor to search for
-parser.add_argument("--hclurl", required=False)        # Vendor to search for
-parser.add_argument("--release", required=False)       # Vendor to search for
-parser.add_argument("--string", required=False)        # A string to search for
-parser.add_argument("--mask", action='store_true')     # Mask MAC addresses etc
-parser.add_argument("--fetch", action='store_true')    # Fetch VMware HCL file from URL
-parser.add_argument("--print", action='store_true')    # Print JSON
-parser.add_argument("--search", action='store_true')   # Search JSON
-parser.add_argument("--options", action='store_true')  # Display options information
-parser.add_argument("--version", action='store_true')  # Display version information
+parser.add_argument("--id", required=False)               # ID to search for
+parser.add_argument("--get", required=False)              # Get a specific key
+parser.add_argument("--url", required=False)              # URL to search for
+parser.add_argument("--vid", required=False)              # VID to search for
+parser.add_argument("--did", required=False)              # VID to search for
+parser.add_argument("--file", required=False)             # JSON file to read in
+parser.add_argument("--ssid", required=False)             # SSID to search for
+parser.add_argument("--svid", required=False)             # SVID to search for
+parser.add_argument("--model", required=False)            # Model to search for
+parser.add_argument("--vendor", required=False)           # Vendor to search for
+parser.add_argument("--hclurl", required=False)           # Vendor to search for
+parser.add_argument("--string", required=False)           # A string to search for
+parser.add_argument("--release", required=False)          # Vendor to search for
+parser.add_argument("--workdir", required=False)          # Work directory
+parser.add_argument("--driverurl", required=False)        # VMware Driver URL 
+parser.add_argument("--mask", action='store_true')        # Mask MAC addresses etc
+parser.add_argument("--fetch", action='store_true')       # Fetch VMware HCL file from URL
+parser.add_argument("--print", action='store_true')       # Print JSON
+parser.add_argument("--search", action='store_true')      # Search JSON
+parser.add_argument("--options", action='store_true')     # Display options information
+parser.add_argument("--version", action='store_true')     # Display version information
+parser.add_argument("--driverinfo", action='store_true')  # Display driver information
 
 options = vars(parser.parse_args())
 
@@ -241,6 +333,11 @@ if options['options']:
   script_exe = sys.argv[0]
   print_options(script_exe)
   exit()
+
+# Handle workdir switch
+
+if not options['workdir']:
+  options['workdir'] = script_dir
 
 # Handle file switch
 
@@ -271,6 +368,13 @@ if not os.path.exists(options['file']):
 if options['print']:
   print_json(options)
   exit()
+
+# Handle driverinfo flag
+
+if options['driverinfo']:
+  if options['driverurl']:
+    get_driver_info(options)
+    exit()
 
 # Handle search flag
 

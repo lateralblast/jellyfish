@@ -10,3 +10,6 @@
 # Improved search code
 # 0.0.5: Thu 25 Nov 2021 21:53:21 AEDT
 # Added code to fetch VMware HCL JSON file
+# 0.0.6: Mon 29 Nov 2021 15:37:22 AEDT
+# Improved output and add initial code to fetch and process individual component information
+
