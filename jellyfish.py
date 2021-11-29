@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.6
+# Version:      0.0.7
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -265,13 +265,18 @@ def get_driver_info(options):
   json_data = open_file.read()
   open_file.close()
   json_data = json.loads(json_data)
-  json_data = json.dumps(json_data, indent=1)
-  output = highlight(
-    json_data,
-    lexer=JsonLexer(),
-    formatter=Terminal256Formatter(),
-  )
-  #json_data = json.loads(json_data)
+  if options['get']:
+    item = options['get']
+    for record in json_data:
+      record = json.loads(record[item])
+      print(record[item])
+  else:
+    json_data = json.dumps(json_data, indent=1)
+    output = highlight(
+      json_data,
+      lexer=JsonLexer(),
+      formatter=Terminal256Formatter(),
+    )
   print(output)
   return
 
@@ -299,6 +304,12 @@ parser.add_argument("--string", required=False)           # A string to search f
 parser.add_argument("--release", required=False)          # Vendor to search for
 parser.add_argument("--workdir", required=False)          # Work directory
 parser.add_argument("--driverurl", required=False)        # VMware Driver URL 
+parser.add_argument("--certdetailid", required=False)     # VMware Driver Cert Detail ID 
+parser.add_argument("--componentid", required=False)      # VMware Driver Component ID 
+parser.add_argument("--releaseid", required=False)        # VMware Driver Release ID 
+parser.add_argument("--drivername", required=False)       # VMware Driver Name
+parser.add_argument("--driverversion", required=False)    # VMware Driver Version
+parser.add_argument("--drivertype", required=False)       # VMware Driver Type
 parser.add_argument("--mask", action='store_true')        # Mask MAC addresses etc
 parser.add_argument("--fetch", action='store_true')       # Fetch VMware HCL file from URL
 parser.add_argument("--print", action='store_true')       # Print JSON

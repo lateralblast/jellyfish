@@ -12,4 +12,6 @@
 # Added code to fetch VMware HCL JSON file
 # 0.0.6: Mon 29 Nov 2021 15:37:22 AEDT
 # Improved output and add initial code to fetch and process individual component information
+# 0.0.7: Mon 29 Nov 2021 19:36:20 AEDT
+# Added code to get value for key for driver
 

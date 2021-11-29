@@ -626,3 +626,10 @@ Fetch and process information for specific component ID to extract JSON:
  }
 ]
 ```
+
+Get data for a key only for the previous example:
+
+```
+./jellyfish.py --driverinfo --driverurl "http://www.vmware.com/resources/compatibility/detail.php?deviceCategory=io&productid=4024" --get DriverName
+qlnativefc
+```
