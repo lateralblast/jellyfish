@@ -14,4 +14,6 @@
 # Improved output and add initial code to fetch and process individual component information
 # 0.0.7: Mon 29 Nov 2021 19:36:20 AEDT
 # Added code to get value for key for driver
+# 0.0.8: Tue 30 Nov 2021 08:39:03 AEDT
+# Cleaned up output
 

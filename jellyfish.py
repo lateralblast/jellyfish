@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Name:         jellyfish
-# Version:      0.0.7
+# Version:      0.0.8
 # Release:      1
 # License:      CC-BA (Creative Commons By Attrbution)
 #               http://creativecommons.org/licenses/by/4.0/legalcode
@@ -171,7 +171,7 @@ def search_json(options):
   options = load_json(options)
   found   = False
   records = []
-  for item in options['keys']:
+  for item in options['hclkeys']:
     if options[item]:
       found = True
   if found == False:
@@ -194,10 +194,12 @@ def search_json(options):
         lexer=JsonLexer(),
         formatter=Terminal256Formatter(),
       )
+      if options['get'] and not re.search(r"^[A-Z]",options['get']):
+        output = "%s: %s" % (item, output)
       print(output)
     return
   records = options['data']
-  for item in options['keys']:
+  for item in options['hclkeys']:
     if options[item]:
       outputs = []
       for record in records:
@@ -211,10 +213,10 @@ def search_json(options):
             outputs.append(record)
       records = {}
       records = outputs
-  for output in records:
-    if options['get']:
+  for record in records:
+    if options['get'] and not re.search(r"^[A-Z]",options['get']):
       item = options['get']
-      print(output[item])
+      print(record[item])
     else:
       json_data = json.dumps(record, indent=1)
       output = highlight(
@@ -223,6 +225,11 @@ def search_json(options):
         formatter=Terminal256Formatter(),
       )
       print(output)
+      if options['driverinfo']:
+        json_data = json.loads(json_data)
+        component_id = json_data['id']
+        options['driverurl'] = "http://www.vmware.com/resources/compatibility/detail.php?deviceCategory=io&productid=%s" % (str(component_id))
+        get_driver_info(options)
   return
 
 # Initiate web client
@@ -267,9 +274,13 @@ def get_driver_info(options):
   json_data = json.loads(json_data)
   if options['get']:
     item = options['get']
+    outputs = []
     for record in json_data:
-      record = json.loads(record[item])
-      print(record[item])
+      output = json.dumps(record[item])
+      if not output in outputs:
+        string = "%s: %s" % (item, output)
+        print(string)
+      outputs.append(output)
   else:
     json_data = json.dumps(json_data, indent=1)
     output = highlight(
@@ -277,7 +288,8 @@ def get_driver_info(options):
       lexer=JsonLexer(),
       formatter=Terminal256Formatter(),
     )
-  print(output)
+  if not options['get']:
+    print(output)
   return
 
 # If we have no command line arguments print help
@@ -327,9 +339,23 @@ if options['release']:
 else:
   options['releases'] = None
 
-# Create a list of keys
+# Create a list of HCL keys
 
-options['keys'] = [ 'id', 'vendor', 'model', 'vid', 'did', 'ssid', 'svid', 'url', 'releases' ]
+options['hclkeys'] = [ "id", "vendor", "model", "vid", "did", "ssid", "svid", "url", "releases" ]
+
+# Create a list of Driver keys
+
+options['driverkeys'] = [ "CertDetail_Id", "Release_Id", "Component_Id", "DriverName",
+  "Version", "Driver_Url", "DeviceType", "Type", "ReleaseVersion", "ReleaseVersionOrig",
+  "inbox_async", "Footnotes", "DeviceDrivers", "KB_Ids", "KB_Id", "KB", "OS_Use",
+  "VMwareSupportDate", "Major", "Minor", "Patch", "Solution", "FirmwareVersion",
+  "AddlFirmwareVersion", "VioSolution", "SwitchName", "SwitchFirmwareVersion",
+  "SwitchBrandName", "SortOrder", "Component_Release_Id", "Configuration_Id",
+  "VmklinuxOrNativeDriver" ]
+
+# Create a list of driver keys
+
+options
 
 # Handle version switch
 
