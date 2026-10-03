@@ -1,10 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Name:         jellyfish
-# Version:      0.0.8
+# Version:      0.2.0
 # Release:      1
-# License:      CC-BA (Creative Commons By Attrbution)
-#               http://creativecommons.org/licenses/by/4.0/legalcode
+# License:      CC BY-NC-SA (Creative Commons Attribution-NonCommercial-ShareAlike)
+#               https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 # Group:        System
 # Source:       N/A
 # URL:          http://lateralblast.com.au/
@@ -14,408 +14,361 @@
 # Description:  Python script to process the VMware HCL JSON file produced here:
 #               https://www.virten.net/2017/01/vmware-io-devices-hcl-in-json-format/
 
-# Import modules
+"""Search the VMware I/O device HCL JSON file and fetch driver details."""
 
-import subprocess
 import argparse
 import json
-import sys
 import os
 import re
+import sys
+
+SCRIPT_PATH = os.path.abspath(__file__)
+SCRIPT_DIR = os.path.dirname(SCRIPT_PATH)
+
+DEFAULT_HCL_URL = "http://www.virten.net/repo/vmware-iohcl.json"
+DRIVER_URL_TEMPLATE = (
+    "http://www.vmware.com/resources/compatibility/detail.php"
+    "?deviceCategory=io&productid=%s"
+)
+
+# Import name: pip package name
+REQUIRED_MODULES = {
+    "wget": "wget",
+    "selenium": "selenium",
+    "pygments": "pygments",
+}
+
+# Keys in an HCL record that can be searched on
+HCL_KEYS = ["id", "vendor", "model", "vid", "did", "ssid", "svid", "url", "releases"]
+
+# Keys in a driver detail record
+DRIVER_KEYS = [
+    "CertDetail_Id", "Release_Id", "Component_Id", "DriverName", "Version",
+    "Driver_Url", "DeviceType", "Type", "ReleaseVersion", "ReleaseVersionOrig",
+    "inbox_async", "Footnotes", "DeviceDrivers", "KB_Ids", "KB_Id", "KB",
+    "OS_Use", "VMwareSupportDate", "Major", "Minor", "Patch", "Solution",
+    "FirmwareVersion", "AddlFirmwareVersion", "VioSolution", "SwitchName",
+    "SwitchFirmwareVersion", "SwitchBrandName", "SortOrder",
+    "Component_Release_Id", "Configuration_Id", "VmklinuxOrNativeDriver",
+]
 
 
-# Set some defaults
+def install_missing_modules():
+    """Install any missing required modules with pip, or exit if that fails."""
+    import importlib
+    import importlib.util
+    import site
+    import subprocess
 
-script_exe = sys.argv[0]
-script_dir = os.path.dirname(script_exe)
+    def find_missing():
+        return [
+            package for module, package in REQUIRED_MODULES.items()
+            if importlib.util.find_spec(module) is None
+        ]
 
-# Check we have pip installed
+    missing = find_missing()
+    if not missing:
+        return
+    print("Installing missing modules: %s" % " ".join(missing))
+    command = [sys.executable, "-m", "pip", "install"]
+    if sys.prefix != sys.base_prefix:
+        attempts = [[]]
+    else:
+        attempts = [["--user"], ["--user", "--break-system-packages"]]
+    for extra in attempts:
+        if subprocess.call(command + extra + missing) == 0:
+            break
+    importlib.invalidate_caches()
+    if site.ENABLE_USER_SITE is not False:
+        site.addsitedir(site.getusersitepackages())
+    missing = find_missing()
+    if missing:
+        print("Warning:\tUnable to install: %s" % " ".join(missing))
+        print("Install manually, e.g.: %s -m pip install %s"
+              % (sys.executable, " ".join(missing)))
+        sys.exit(1)
 
-try:
-  from pip._internal import main
-except ImportError:
-  os.system("easy_install pip")
-  os.system("pip install --upgrade pip")
 
-# install and import a python module
+def build_parser():
+    """Create the command line argument parser."""
+    parser = argparse.ArgumentParser(
+        description="Process the VMware HCL JSON file and driver information")
+    parser.add_argument("--id", help="ID to search for")
+    parser.add_argument("--get", help="Get a specific key")
+    parser.add_argument("--url", help="URL to search for")
+    parser.add_argument("--vid", help="VID to search for")
+    parser.add_argument("--did", help="DID to search for")
+    parser.add_argument("--file", help="JSON file to read in")
+    parser.add_argument("--ssid", help="SSID to search for")
+    parser.add_argument("--svid", help="SVID to search for")
+    parser.add_argument("--model", help="Model to search for")
+    parser.add_argument("--vendor", help="Vendor to search for")
+    parser.add_argument("--hclurl", help="URL to fetch the HCL JSON file from")
+    parser.add_argument("--string", help="A string to search for")
+    parser.add_argument("--release", help="Release to search for")
+    parser.add_argument("--workdir", help="Work directory")
+    parser.add_argument("--driverurl", help="VMware Driver URL")
+    parser.add_argument("--certdetailid", help="VMware Driver Cert Detail ID")
+    parser.add_argument("--componentid", help="VMware Driver Component ID")
+    parser.add_argument("--releaseid", help="VMware Driver Release ID")
+    parser.add_argument("--drivername", help="VMware Driver Name")
+    parser.add_argument("--driverversion", help="VMware Driver Version")
+    parser.add_argument("--drivertype", help="VMware Driver Type")
+    parser.add_argument("--mask", action="store_true",
+                        help="Mask MAC addresses etc")
+    parser.add_argument("--fetch", action="store_true",
+                        help="Fetch VMware HCL file from URL")
+    parser.add_argument("--print", action="store_true", help="Print JSON")
+    parser.add_argument("--search", action="store_true", help="Search JSON")
+    parser.add_argument("--options", action="store_true",
+                        help="Display options information")
+    parser.add_argument("--version", action="store_true",
+                        help="Display version information")
+    parser.add_argument("--driverinfo", action="store_true",
+                        help="Display driver information")
+    return parser
 
-def install_and_import(package):
-  import importlib
-  try:
-    importlib.import_module(package)
-  except ImportError:
-    command = "python3 -m pip install --user %s" % (package)
-    os.system(command)
-  finally:
-    globals()[package] = importlib.import_module(package)
 
-# load wget
+def print_version():
+    """Print the version from this script's header comment."""
+    with open(SCRIPT_PATH) as script_file:
+        for line in script_file:
+            match = re.match(r"^# Version:\s*(\S+)", line)
+            if match:
+                print(match.group(1))
+                return
 
-try:
-  import wget
-except ImportError:
-  install_and_import("wget")
-  import wget
 
-# Load selenium
+def print_options(parser):
+    """Print each option and its help text."""
+    print("\nOptions:\n")
+    for action in parser._actions:
+        if action.option_strings and action.help:
+            print("%-16s%s" % (action.option_strings[-1], action.help))
+    print("\n")
 
-try:
-  from selenium import webdriver
-except ImportError:
-  install_and_import("selenium")
-  from selenium import webdriver
-
-# Load bs4
-
-try:
-  from bs4 import BeautifulSoup
-except ImportError:
-  install_and_import("bs4")
-  from bs4 import BeautifulSoup
-
-# Load pygments
-
-try:
-  from pygments import highlight
-except ImportError:
-  install_and_import("pygments")
-  from pygments import highlight
-
-from pygments.formatters.terminal256 import Terminal256Formatter
-from pygments.lexers.web import JsonLexer  
-
-# Print version
-
-def print_version(script_exe):
-  file_array = file_to_array(script_exe)
-  version    = list(filter(lambda x: re.search(r"^# Version", x), file_array))[0].split(":")[1]
-  version    = re.sub(r"\s+", "", version)
-  print(version)
-
-# Print help
-
-def print_help(script_exe):
-  print("\n")
-  command  = "%s -h" % (script_exe)
-  os.system(command)
-  print("\n")
-
-# Read a file into an array
-
-def file_to_array(file_name):
-  file_data  = open(file_name)
-  file_array = file_data.readlines()
-  return file_array
-
-# Print options
-
-def print_options(script_exe):
-  file_array = file_to_array(script_exe)
-  opts_array = list(filter(lambda x:re.search(r"add_argument", x), file_array))
-  print("\nOptions:\n")
-  for line in opts_array:
-    line = line.rstrip()
-    if re.search(r"#", line):
-      option = line.split('"')[1]
-      info   = line.split("# ")[1]
-      if len(option) < 8:
-        string = "%s\t\t\t%s" % (option,info)
-      else:
-        if len(option) < 16:
-          string = "%s\t\t%s" % (option,info)
-        else:
-          string = "%s\t%s" % (option,info)
-      print(string)
-  print("\n")
-
-# Handle output
 
 def handle_output(options, output):
-  if options['mask'] == True:
-    if re.search(r"serial|address|host|id", output.lower()):
-      if re.search(":", output):
-        param  = output.split(":")[0]
-        output = "%s: XXXXXXXX" % (param)
-  print(output)
-  return
+    """Print output, masking sensitive values if --mask was given."""
+    if options["mask"]:
+        if re.search(r"serial|address|host|id", output.lower()) and ":" in output:
+            output = "%s: XXXXXXXX" % output.split(":")[0]
+    print(output)
 
-# Execute command
 
-def execute_command(options, command):
-  process = subprocess.Popen(command, shell=True, stdout = subprocess.PIPE, )
-  output  = process.communicate()[0].decode()
-  if options['verbose'] == True:
-    string = "Output:\n%s" % (output)
-    handle_output(options, string)
+def word_pattern(string):
+    """Return a regex matching string as a whole word."""
+    return r"\b(?=\w)" + re.escape(string) + r"\b(?!\w)"
 
-# Load JSON
+
+def field_matches(value, string):
+    """Check if a record value (None, scalar or list) contains string."""
+    if value is None:
+        return False
+    if not isinstance(value, list):
+        value = [value]
+    pattern = word_pattern(string)
+    return any(re.search(pattern, str(entry)) for entry in value)
+
+
+def print_highlighted(json_text):
+    """Print JSON text with terminal syntax highlighting."""
+    from pygments import highlight
+    from pygments.formatters.terminal256 import Terminal256Formatter
+    from pygments.lexers.web import JsonLexer
+    print(highlight(json_text, lexer=JsonLexer(), formatter=Terminal256Formatter()))
+
 
 def load_json(options):
-  with open(options['file'], 'r') as json_file:
-    json_data = json.load(json_file)
-    json_data = json_data['data']
-    json_data = json_data['ioDevices']
-    options['data'] = json_data
-    return(options)
+    """Load the ioDevices list from the HCL JSON file into options['data']."""
+    with open(options["file"], "r") as json_file:
+        options["data"] = json.load(json_file)["data"]["ioDevices"]
+    return options
 
-# Print JSON
 
 def print_json(options):
-  options = load_json(options)
-  output  = json.dumps(options['data'], indent=1)
-  print(output)
+    """Print the whole HCL data set as JSON."""
+    options = load_json(options)
+    print(json.dumps(options["data"], indent=1))
 
-# Search JSON
+
+def search_string(options):
+    """Search every record for --string, optionally printing one key."""
+    key = options["get"]
+    pattern = word_pattern(options["string"]) if options["string"] else None
+    records = []
+    for record in options["data"]:
+        if not pattern or not re.search(pattern, str(record)):
+            continue
+        if key:
+            if key not in record:
+                continue
+            output = json.dumps(record[key], indent=1)
+        else:
+            output = json.dumps(record, indent=1)
+        if output not in records:
+            records.append(output)
+    for output in records:
+        if key and not re.search(r"^[A-Z]", key):
+            print("%s: %s" % (key, output))
+        else:
+            print_highlighted(output)
+
+
+def search_keys(options):
+    """Narrow records by each HCL key given, then print the matches."""
+    records = options["data"]
+    for hcl_key in HCL_KEYS:
+        if not options[hcl_key]:
+            continue
+        matches = []
+        for record in records:
+            if not field_matches(record.get(hcl_key), options[hcl_key]):
+                continue
+            if options["string"] and not re.search(
+                    word_pattern(options["string"]), str(record)):
+                continue
+            matches.append(record)
+        records = matches
+    key = options["get"]
+    for record in records:
+        if key and not re.search(r"^[A-Z]", key):
+            if key in record:
+                print(record[key])
+            continue
+        print_highlighted(json.dumps(record, indent=1))
+        if options["driverinfo"]:
+            options["driverurl"] = DRIVER_URL_TEMPLATE % record["id"]
+            get_driver_info(options)
+
 
 def search_json(options):
-  options = load_json(options)
-  found   = False
-  records = []
-  for item in options['hclkeys']:
-    if options[item]:
-      found = True
-  if found == False:
-    for record in options['data']:
-      if options['string']:
-        patern = r"\b(?=\w)" + re.escape(options['string']) + r"\b(?!\w)"
-        if re.search(patern, str(record)):
-          if options["get"]:
-            item   = options['get']
-            output = record[item]
-            output = json.dumps(output, indent=1)
-          else:
-            output = json.dumps(record, indent=1)
-          if not output in records:
-            records.append(output)
-    for record in records:
-      json_data = record
-      output = highlight(
-        json_data,
-        lexer=JsonLexer(),
-        formatter=Terminal256Formatter(),
-      )
-      if options['get'] and not re.search(r"^[A-Z]",options['get']):
-        output = "%s: %s" % (item, output)
-      print(output)
-    return
-  records = options['data']
-  for item in options['hclkeys']:
-    if options[item]:
-      outputs = []
-      for record in records:
-        patern = r"\b(?=\w)" + re.escape(options[item]) + r"\b(?!\w)"
-        if re.search(patern, record[item]):
-          if options['string']:
-            patern = r"\b(?=\w)" + re.escape(options['string']) + r"\b(?!\w)"
-            if re.search(patern, str(record)):
-              outputs.append(record)
-          else:
-            outputs.append(record)
-      records = {}
-      records = outputs
-  for record in records:
-    if options['get'] and not re.search(r"^[A-Z]",options['get']):
-      item = options['get']
-      print(record[item])
+    """Search the HCL data by key or by string."""
+    options = load_json(options)
+    if any(options[hcl_key] for hcl_key in HCL_KEYS):
+        search_keys(options)
     else:
-      json_data = json.dumps(record, indent=1)
-      output = highlight(
-        json_data,
-        lexer=JsonLexer(),
-        formatter=Terminal256Formatter(),
-      )
-      print(output)
-      if options['driverinfo']:
-        json_data = json.loads(json_data)
-        component_id = json_data['id']
-        options['driverurl'] = "http://www.vmware.com/resources/compatibility/detail.php?deviceCategory=io&productid=%s" % (str(component_id))
-        get_driver_info(options)
-  return
+        search_string(options)
 
-# Initiate web client
 
 def start_web_driver():
-  from selenium.webdriver.firefox.options import Options
-  options = Options()
-  options.headless = True
-  driver = webdriver.Firefox(options=options)
-  return driver
+    """Start a headless Firefox web driver."""
+    from selenium import webdriver
+    from selenium.webdriver.firefox.options import Options
+    firefox_options = Options()
+    firefox_options.add_argument("-headless")
+    return webdriver.Firefox(options=firefox_options)
 
-# Get driver information from VMware URL
+
+def fetch_driver_html(options, html_file):
+    """Fetch the driver page HTML and save it to html_file."""
+    driver = start_web_driver()
+    try:
+        driver.get(options["driverurl"])
+        html_data = driver.page_source
+    finally:
+        driver.quit()
+    with open(html_file, "w") as open_file:
+        open_file.write(html_data)
+
+
+def extract_driver_json(html_file, json_file):
+    """Extract the driver details JSON from html_file into json_file."""
+    with open(html_file, "r") as open_file:
+        html_data = open_file.readlines()
+    for html_line in html_data:
+        if "Component_Id" in html_line and "var details =" in html_line:
+            html_line = html_line.split("var details =")[1].strip()
+            html_line = re.sub(r";$", "", html_line)
+            with open(json_file, "w") as open_file:
+                open_file.write(html_line)
+            return True
+    return False
+
 
 def get_driver_info(options):
-  if not re.search(r"productid", options['driverurl']):
-    handle_output(options,"Warning:\tInvalid URL")
-    return
-  prod_id   = re.split("=", options['driverurl'])[-1]
-  html_file = "%s/%s.html" % (options['workdir'], prod_id)
-  json_file = "%s/%s.json" % (options['workdir'], prod_id)
-  if not os.path.exists(json_file):
-    if not os.path.exists(html_file):
-      driver = start_web_driver()
-      driver.get(options['driverurl'])
-      html_data = driver.page_source
-      open_file = open(html_file, "w")
-      open_file.write(html_data)
-      open_file.close()
-    open_file = open(html_file, "r")
-    html_data = open_file.readlines()
-    open_file.close()
-    for html_line in html_data:
-      if re.search(r"Component_Id", html_line):
-        html_line = html_line.split("var details =")[1]
-        html_line = re.sub(r"\;$", "", html_line)
-        open_file = open(json_file, "w")
-        open_file.write(html_line)
-        open_file.close()
-  open_file = open(json_file, "r")
-  json_data = open_file.read()
-  open_file.close()
-  json_data = json.loads(json_data)
-  if options['get']:
-    item = options['get']
+    """Print driver details for options['driverurl'], caching in the workdir."""
+    if "productid" not in options["driverurl"]:
+        handle_output(options, "Warning:\tInvalid URL")
+        return
+    prod_id = options["driverurl"].split("=")[-1]
+    html_file = os.path.join(options["workdir"], "%s.html" % prod_id)
+    json_file = os.path.join(options["workdir"], "%s.json" % prod_id)
+    if not os.path.exists(json_file):
+        if not os.path.exists(html_file):
+            fetch_driver_html(options, html_file)
+        if not extract_driver_json(html_file, json_file):
+            os.remove(html_file)
+            handle_output(
+                options, "Warning:\tNo driver details found for %s" % prod_id)
+            return
+    with open(json_file, "r") as open_file:
+        json_data = json.load(open_file)
+    key = options["get"]
+    if not key:
+        print_highlighted(json.dumps(json_data, indent=1))
+        return
     outputs = []
     for record in json_data:
-      output = json.dumps(record[item])
-      if not output in outputs:
-        string = "%s: %s" % (item, output)
-        print(string)
-      outputs.append(output)
-  else:
-    json_data = json.dumps(json_data, indent=1)
-    output = highlight(
-      json_data,
-      lexer=JsonLexer(),
-      formatter=Terminal256Formatter(),
-    )
-  if not options['get']:
-    print(output)
-  return
+        if key not in record:
+            continue
+        output = json.dumps(record[key])
+        if output not in outputs:
+            print("%s: %s" % (key, output))
+        outputs.append(output)
 
-# If we have no command line arguments print help
 
-if sys.argv[-1] == sys.argv[0]:
-  print_help(script_exe)
-  exit()
+def fetch_hcl(options):
+    """Download the HCL JSON file, keeping any existing file on failure."""
+    import wget
+    temp_file = "%s.tmp" % options["file"]
+    try:
+        wget.download(options["hclurl"], temp_file)
+        os.replace(temp_file, options["file"])
+    except Exception as error:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        handle_output(options, "Warning:\tFailed to fetch %s: %s"
+                      % (options["hclurl"], error))
 
-# Get command line arguments
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--id", required=False)               # ID to search for
-parser.add_argument("--get", required=False)              # Get a specific key
-parser.add_argument("--url", required=False)              # URL to search for
-parser.add_argument("--vid", required=False)              # VID to search for
-parser.add_argument("--did", required=False)              # VID to search for
-parser.add_argument("--file", required=False)             # JSON file to read in
-parser.add_argument("--ssid", required=False)             # SSID to search for
-parser.add_argument("--svid", required=False)             # SVID to search for
-parser.add_argument("--model", required=False)            # Model to search for
-parser.add_argument("--vendor", required=False)           # Vendor to search for
-parser.add_argument("--hclurl", required=False)           # Vendor to search for
-parser.add_argument("--string", required=False)           # A string to search for
-parser.add_argument("--release", required=False)          # Vendor to search for
-parser.add_argument("--workdir", required=False)          # Work directory
-parser.add_argument("--driverurl", required=False)        # VMware Driver URL 
-parser.add_argument("--certdetailid", required=False)     # VMware Driver Cert Detail ID 
-parser.add_argument("--componentid", required=False)      # VMware Driver Component ID 
-parser.add_argument("--releaseid", required=False)        # VMware Driver Release ID 
-parser.add_argument("--drivername", required=False)       # VMware Driver Name
-parser.add_argument("--driverversion", required=False)    # VMware Driver Version
-parser.add_argument("--drivertype", required=False)       # VMware Driver Type
-parser.add_argument("--mask", action='store_true')        # Mask MAC addresses etc
-parser.add_argument("--fetch", action='store_true')       # Fetch VMware HCL file from URL
-parser.add_argument("--print", action='store_true')       # Print JSON
-parser.add_argument("--search", action='store_true')      # Search JSON
-parser.add_argument("--options", action='store_true')     # Display options information
-parser.add_argument("--version", action='store_true')     # Display version information
-parser.add_argument("--driverinfo", action='store_true')  # Display driver information
+def main():
+    """Parse arguments and run the requested action."""
+    parser = build_parser()
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
+    options = vars(parser.parse_args())
+    if options["version"]:
+        print_version()
+        return 0
+    if options["options"]:
+        print_options(parser)
+        return 0
 
-options = vars(parser.parse_args())
+    install_missing_modules()
 
-# Handle release flag
+    # --release is stored under the HCL key name
+    options["releases"] = options["release"]
+    options["workdir"] = options["workdir"] or SCRIPT_DIR
+    options["file"] = options["file"] or os.path.join(
+        SCRIPT_DIR, "vmware-iohcl.json")
+    options["hclurl"] = options["hclurl"] or DEFAULT_HCL_URL
 
-if options['release']:
-  options['releases'] = options['release']
-else:
-  options['releases'] = None
+    if options["fetch"]:
+        fetch_hcl(options)
+    if not os.path.exists(options["file"]):
+        handle_output(
+            options, "Warning:\tJSON file %s not found" % options["file"])
+        return 1
+    if options["print"]:
+        print_json(options)
+    elif options["driverinfo"] and options["driverurl"]:
+        get_driver_info(options)
+    elif options["search"]:
+        search_json(options)
+    return 0
 
-# Create a list of HCL keys
 
-options['hclkeys'] = [ "id", "vendor", "model", "vid", "did", "ssid", "svid", "url", "releases" ]
-
-# Create a list of Driver keys
-
-options['driverkeys'] = [ "CertDetail_Id", "Release_Id", "Component_Id", "DriverName",
-  "Version", "Driver_Url", "DeviceType", "Type", "ReleaseVersion", "ReleaseVersionOrig",
-  "inbox_async", "Footnotes", "DeviceDrivers", "KB_Ids", "KB_Id", "KB", "OS_Use",
-  "VMwareSupportDate", "Major", "Minor", "Patch", "Solution", "FirmwareVersion",
-  "AddlFirmwareVersion", "VioSolution", "SwitchName", "SwitchFirmwareVersion",
-  "SwitchBrandName", "SortOrder", "Component_Release_Id", "Configuration_Id",
-  "VmklinuxOrNativeDriver" ]
-
-# Create a list of driver keys
-
-options
-
-# Handle version switch
-
-if options['version']:
-  script_exe = sys.argv[0]
-  print_version(script_exe)
-  exit()
-
-# Handle options switch
-
-if options['options']:
-  script_exe = sys.argv[0]
-  print_options(script_exe)
-  exit()
-
-# Handle workdir switch
-
-if not options['workdir']:
-  options['workdir'] = script_dir
-
-# Handle file switch
-
-if not options['file']:
-  options['file'] = "%s/vmware-iohcl.json" % (script_dir)
-
-# Handle hclurl switch:
-
-if not options['hclurl']:
-  options['hclurl'] = "http://www.virten.net/repo/vmware-iohcl.json"
-
-# Handle fetch switch
-
-if options['fetch']:
-  if os.path.exists(options['file']):
-    os.remove(options['file'])
-  wget.download(options['hclurl'],options['file'])
-
-# Exit if not JSON file
-
-if not os.path.exists(options['file']):
-  string = "Warning:\tJSON file %s not found" % (options['file'])
-  handle_output(options, string)
-  exit()
-
-# Handle print flag
-
-if options['print']:
-  print_json(options)
-  exit()
-
-# Handle driverinfo flag
-
-if options['driverinfo']:
-  if options['driverurl']:
-    get_driver_info(options)
-    exit()
-
-# Handle search flag
-
-if options['search']:
-  search_json(options)
-  exit()
-
+if __name__ == "__main__":
+    sys.exit(main())

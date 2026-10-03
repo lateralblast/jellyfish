@@ -7,26 +7,30 @@ Jellyfish is a script to process the VMware HCL JSON file produced here:
 
 https://www.virten.net/2017/01/vmware-io-devices-hcl-in-json-format/
 
+Version
+-------
+
+Current version: 0.2.0
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
 Requirements
 ------------
 
-Required Python modules:
+Required Python modules (installed automatically if missing, or via `pip install -r requirements.txt`):
 
-- subprocess
-- argparse
+- wget
+- selenium
 - pygments
-- json
-- bs4
-- sys
-- os
-- re
+
+Driver information (`--driverinfo`) also requires Firefox and geckodriver.
 
 License
 -------
 
-This software is licensed as CC-BA (Creative Commons By Attrbution)
+This software is licensed as CC BY-NC-SA (Creative Commons Attribution-NonCommercial-ShareAlike 4.0)
 
-http://creativecommons.org/licenses/by/4.0/legalcode
+https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 
 Usage
 -----
@@ -633,3 +637,10 @@ Get data for a key only for the previous example:
 ./jellyfish.py --driverinfo --driverurl "http://www.vmware.com/resources/compatibility/detail.php?deviceCategory=io&productid=4024" --get DriverName
 DriverName: "qlnativefc"
 ```
+
+Help Support Development
+------------------------
+
+If you find this software useful and would like to support its development, please consider buying me a coffee:
+
+https://ko-fi.com/richardatlateralblast
